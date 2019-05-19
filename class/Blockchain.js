@@ -12,7 +12,7 @@ class BlockChain {
 
   // Create origin of blockchain
   createGenesisBlock() {
-    return new Block(Date.now(), 'Genesis Block', '0');
+    return new Block(Date.now(), [], '0');
   }
 
   getLatestBlock() {
@@ -25,7 +25,19 @@ class BlockChain {
    * - The transaction will store address between user together
    * - And will working on them when the hash is solved.
    */
-  createTransaction(transaction) {
+  addTransaction(transaction) {
+    if (!transaction.fromAddress || !transaction.toAddress) {
+      throw new Error('Transaction must include from and to address');
+    }
+
+    if (!transaction.isValid()) {
+      throw new Error('Cannot add invalid transaction to chain');
+    }
+
+    if (transaction.amount <= 0) {
+      throw new Error('Transaction amount should be higher than 0');
+    }
+
     this.pendingTransactions.push(transaction);
   }
 
@@ -37,19 +49,24 @@ class BlockChain {
    * - After that. Send reward to the address who solve the hash and send reward to miner address.
    */
   minePendingTransactions(miningRewardAddress) {
-    // Create block
-    let block = new Block(Date.now(), this.pendingTransactions);
-    // Solve hash by difficult that set in blockchain system
+    const rewardTx = new Transaction(
+      null,
+      miningRewardAddress,
+      this.miningReward
+    );
+    this.pendingTransactions.push(rewardTx);
+
+    let block = new Block(
+      Date.now(),
+      this.pendingTransactions,
+      this.getLatestBlock().hash
+    );
     block.mineBlock(this.difficulty);
 
-    console.log(`Block successfully mined!`);
-    // After solve the hash. Then push it into chain.
+    console.log('Block successfully mined!');
     this.chain.push(block);
 
-    // Then create new transaction and give reward to hash address.
-    this.pendingTransactions = [
-      new Transaction(null, miningRewardAddress, this.miningReward)
-    ];
+    this.pendingTransactions = [];
   }
 
   getBalanceOfAddress(address) {
@@ -75,6 +92,10 @@ class BlockChain {
       const currentBlock = this.chain[index];
       const previousBlock = this.chain[index - 1];
 
+      if (!currentBlock.hashValidTransaction()) {
+        return false;
+      }
+
       if (currentBlock.hash !== currentBlock.calculateHash()) {
         return false;
       }
@@ -85,6 +106,27 @@ class BlockChain {
     }
 
     return true;
+  }
+
+  /**
+   * Returns a list of all transactions that happened
+   * to and from the given wallet address.
+   *
+   * @param  {string} address
+   * @return {Transaction[]}
+   */
+  getAllTransactionsForWallet(address) {
+    const txs = [];
+
+    for (const block of this.chain) {
+      for (const tx of block.transactions) {
+        if (tx.fromAddress === address || tx.toAddress === address) {
+          txs.push(tx);
+        }
+      }
+    }
+
+    return txs;
   }
 }
 
